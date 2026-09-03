@@ -10,16 +10,14 @@ services:
   dagster_postgresql:
     image: postgres:15
     container_name: dagster_postgresql
-    environment:
-      POSTGRES_USER: dagster
-      POSTGRES_PASSWORD: dagster
-      POSTGRES_DB: dagster
+    env_file:
+      - .env
     networks:
       - dagster_network
     volumes:
       - dagster_pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dagster"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
       interval: 5s
       timeout: 5s
       retries: 10

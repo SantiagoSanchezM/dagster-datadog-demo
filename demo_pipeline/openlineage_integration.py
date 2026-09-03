@@ -7,12 +7,15 @@ The openlineage-python HTTP transport is configured purely through env vars
 """
 
 import functools
+import os
 import uuid
 from datetime import datetime, timezone
 
+import attr
 from openlineage.client import facet_v2
 from openlineage.client.client import OpenLineageClient
 from openlineage.client.event_v2 import Dataset, Job, Run, RunEvent, RunState
+from openlineage.client.facet_v2 import JobFacet
 
 data_quality_assertions_dataset = facet_v2.data_quality_assertions_dataset
 error_message_run = facet_v2.error_message_run
@@ -22,6 +25,24 @@ parent_run = facet_v2.parent_run
 PRODUCER = "https://github.com/datadog/dagster-datadog-demo"
 JOB_NAMESPACE = "dagster://demo-pipeline"
 DATASET_NAMESPACE = "duckdb://demo-pipeline/warehouse"
+
+# Datadog's Data Job Monitoring surfaces tags whose facet has source == "USER"
+# (see https://docs.datadoghq.com/data_observability/jobs_monitoring/openlineage/).
+# openlineage-python 1.24.2 doesn't ship a generated TagsJobFacet class, so define
+# a minimal one matching that spec ourselves.
+OL_ENV_TAG = os.environ.get("OL_ENV_TAG", "prod")
+
+
+@attr.define
+class TagsJobFacet(JobFacet):
+    tags: list = attr.field(factory=list)
+
+
+def _env_tag_facet() -> TagsJobFacet:
+    return TagsJobFacet(
+        tags=[{"key": "env", "value": OL_ENV_TAG, "source": "USER"}],
+        producer=PRODUCER,
+    )
 
 # maps dagster asset name -> duckdb "schema.table" it materializes
 ASSET_TABLES = {
@@ -53,7 +74,8 @@ def _job_type_facets(job_type: str) -> dict:
             integration="dagster",
             jobType=job_type,
             producer=PRODUCER,
-        )
+        ),
+        "tags": _env_tag_facet(),
     }
 
 

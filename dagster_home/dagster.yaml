@@ -3,10 +3,13 @@ run_storage:
   class: PostgresRunStorage
   config:
     postgres_db:
-      username: dagster
-      password: dagster
+      username:
+        env: POSTGRES_USER
+      password:
+        env: POSTGRES_PASSWORD
       hostname: dagster_postgresql
-      db_name: dagster
+      db_name:
+        env: POSTGRES_DB
       port: 5432
 
 event_log_storage:
@@ -14,10 +17,13 @@ event_log_storage:
   class: PostgresEventLogStorage
   config:
     postgres_db:
-      username: dagster
-      password: dagster
+      username:
+        env: POSTGRES_USER
+      password:
+        env: POSTGRES_PASSWORD
       hostname: dagster_postgresql
-      db_name: dagster
+      db_name:
+        env: POSTGRES_DB
       port: 5432
 
 schedule_storage:
@@ -25,10 +31,13 @@ schedule_storage:
   class: PostgresScheduleStorage
   config:
     postgres_db:
-      username: dagster
-      password: dagster
+      username:
+        env: POSTGRES_USER
+      password:
+        env: POSTGRES_PASSWORD
       hostname: dagster_postgresql
-      db_name: dagster
+      db_name:
+        env: POSTGRES_DB
       port: 5432
 
 run_coordinator:
