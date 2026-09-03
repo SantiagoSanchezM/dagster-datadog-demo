@@ -18,10 +18,10 @@ REGIONS = ["NA", "EMEA", "APAC", "LATAM"]
 _flaky_rng = random.SystemRandom()
 
 
-def _simulate_flaky_upstream_source(failure_rate: float = 0.25) -> None:
-    """Randomly simulate the upstream order-service timing out, for demo purposes."""
+def _simulate_flaky_cleaning_step(failure_rate: float = 0.25) -> None:
+    """Randomly simulate the cleaning step failing, for demo purposes."""
     if _flaky_rng.random() < failure_rate:
-        raise RuntimeError("Timed out fetching orders from the upstream OLTP order service")
+        raise RuntimeError("Lock timeout acquiring staging.orders while deduplicating raw.orders")
 
 
 @asset(group_name="raw", compute_kind="python")
@@ -48,7 +48,6 @@ def raw_customers(context: AssetExecutionContext, duckdb_resource: DuckDBResourc
 @with_lineage("raw_orders", outputs=["raw.orders"])
 def raw_orders(context: AssetExecutionContext, duckdb_resource: DuckDBResource) -> None:
     """Synthetic order records, as if landed from an OLTP order service."""
-    _simulate_flaky_upstream_source()
     rows = []
     for i in range(1, 5001):
         # sprinkle in some dirty data to make cleaning + data-quality checks meaningful
@@ -76,6 +75,7 @@ def raw_orders(context: AssetExecutionContext, duckdb_resource: DuckDBResource) 
 @with_lineage("cleaned_orders", inputs=["raw.orders"], outputs=["staging.orders"])
 def cleaned_orders(context: AssetExecutionContext, duckdb_resource: DuckDBResource) -> None:
     """Dedupe orders and drop rows with non-positive amounts."""
+    _simulate_flaky_cleaning_step()
     with duckdb_resource.get_connection() as conn:
         conn.execute("CREATE SCHEMA IF NOT EXISTS staging")
         conn.execute(
