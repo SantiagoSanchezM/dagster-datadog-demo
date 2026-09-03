@@ -72,6 +72,17 @@ There are two instrumentation layers, both in `demo_pipeline/`:
        ...
    ```
 
+   On `COMPLETE`, the decorator also runs a `SELECT COUNT(*)` against each declared output table
+   and attaches it as an `outputStatistics` facet (`rowCount`) on that Dataset - this is what makes
+   real record counts show up on dataset nodes in the Lineage graph, since Datadog only displays
+   "basic stats such as row or column count" when a facet actually supplies them. Dataset identity
+   (the node existing at all) doesn't require a live DB connection, but any stats shown on it do -
+   we compute those ourselves here since DuckDB isn't one of Datadog's natively-scanned warehouses
+   (Snowflake, BigQuery, Redshift, Postgres, etc.). A deeper "Quality Monitoring" experience
+   (freshness/volume anomaly detection) is a separate Datadog product built around those native
+   connectors; getting that would mean pointing Datadog at a real supported warehouse rather than
+   this demo's local DuckDB file.
+
    That one line is enough for `cleaned_orders` to show up as a Job in Datadog with a `raw.orders
    -> cleaned_orders -> staging.orders` edge in Lineage, and a `FAIL` run in Jobs Monitoring
    whenever the simulated lock-timeout fires.

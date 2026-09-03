@@ -20,6 +20,7 @@ from openlineage.client.facet_v2 import JobFacet
 data_quality_assertions_dataset = facet_v2.data_quality_assertions_dataset
 error_message_run = facet_v2.error_message_run
 job_type_job = facet_v2.job_type_job
+output_statistics_output_dataset = facet_v2.output_statistics_output_dataset
 parent_run = facet_v2.parent_run
 
 PRODUCER = "https://github.com/datadog/dagster-datadog-demo"
@@ -116,6 +117,7 @@ def emit_task_event(
     inputs: list[str] | None = None,
     outputs: list[str] | None = None,
     dq_assertions: dict[str, list[data_quality_assertions_dataset.Assertion]] | None = None,
+    output_row_counts: dict[str, int] | None = None,
     error: str | None = None,
 ) -> None:
     """Emit a START/COMPLETE/FAIL event for one asset (a 'task' in the DAG)."""
@@ -127,6 +129,10 @@ def emit_task_event(
         if dq_assertions and table in dq_assertions:
             facets["dataQualityAssertions"] = data_quality_assertions_dataset.DataQualityAssertionsDatasetFacet(
                 assertions=dq_assertions[table], producer=PRODUCER
+            )
+        if output_row_counts and table in output_row_counts:
+            facets["outputStatistics"] = output_statistics_output_dataset.OutputStatisticsOutputDatasetFacet(
+                rowCount=output_row_counts[table], producer=PRODUCER
             )
         output_datasets.append(Dataset(namespace=DATASET_NAMESPACE, name=table, facets=facets))
 
@@ -152,6 +158,20 @@ def emit_task_event(
         producer=PRODUCER,
     )
     get_client().emit(event)
+
+
+def _output_row_counts(duckdb_resource, tables: list[str] | None) -> dict[str, int]:
+    """Best-effort row counts for the tables an asset just wrote, for the outputStatistics facet."""
+    if duckdb_resource is None or not tables:
+        return {}
+    counts = {}
+    try:
+        with duckdb_resource.get_connection() as conn:
+            for table in tables:
+                counts[table] = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]  # noqa: S608
+    except Exception:
+        return {}
+    return counts
 
 
 def with_lineage(task_name: str, *, inputs: list[str] | None = None, outputs: list[str] | None = None):
@@ -181,6 +201,7 @@ def with_lineage(task_name: str, *, inputs: list[str] | None = None, outputs: li
                     error=str(e),
                 )
                 raise
+            row_counts = _output_row_counts(kwargs.get("duckdb_resource"), outputs)
             emit_task_event(
                 dagster_run_id=run_id,
                 parent_job_name=JOB_NAME,
@@ -188,6 +209,7 @@ def with_lineage(task_name: str, *, inputs: list[str] | None = None, outputs: li
                 event_type=RunState.COMPLETE,
                 inputs=inputs,
                 outputs=outputs,
+                output_row_counts=row_counts,
             )
             return result
 
