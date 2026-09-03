@@ -9,11 +9,12 @@ with custom [OpenLineage](https://openlineage.io/) events sent directly to
 ## What's here
 
 - **`daily_refresh_job`**: `raw_customers` / `raw_orders` -> `cleaned_orders` -> `enriched_orders` -> `revenue_by_region`,
-  seeded with realistic messy data (duplicates, bad amounts, orphan foreign keys).
+  loaded from fabricated CSV seed data (`demo_pipeline/seed_data/`) with realistic messiness
+  (duplicates, bad amounts, orphan foreign keys) baked in.
 - Two Dagster asset checks (`non_negative_revenue`, `no_orphan_customers`) feeding a
   `dataQualityAssertions` OpenLineage facet.
-- `raw_orders` has a 25% chance of raising, to simulate an upstream outage and demo how a
-  failed run shows up in Datadog.
+- `cleaned_orders` has a 25% chance of raising, to simulate a downstream lock timeout and demo
+  how a failed task/run shows up in both Jobs Monitoring and Lineage in Datadog.
 - A schedule running the job every 5 minutes (`demo_pipeline/schedules.py`).
 - `demo_pipeline/openlineage_integration.py` + `demo_pipeline/sensors.py`: emit OpenLineage
   `RunEvent`s (START/COMPLETE/FAIL) at both the job (DAG) and per-asset (task) level, straight
@@ -41,6 +42,52 @@ with custom [OpenLineage](https://openlineage.io/) events sent directly to
 
 4. Check Datadog under **Data Observability > Jobs Monitoring / Lineage** for `daily_refresh_job`
    and its asset-level tasks, including the `data_quality_validation` node and any failed runs.
+
+## How the OpenLineage instrumentation works
+
+Datadog's Data Job Monitoring and Lineage products are both built on
+[OpenLineage](https://openlineage.io/)'s data model: a **Job** (a task or DAG) has **Runs**
+(one execution, with a `runId` and a `START`/`COMPLETE`/`FAIL` lifecycle), and each Run declares
+the **Datasets** it reads (`inputs`) and writes (`outputs`). Datadog builds Jobs Monitoring from
+the Job/Run side of that model and the Lineage graph from the Dataset edges those runs declare.
+Full facet/endpoint reference: [Custom Jobs using OpenLineage](https://docs.datadoghq.com/data_observability/jobs_monitoring/openlineage/).
+
+This repo emits that model **directly** — no Datadog Agent involved. The `openlineage-python`
+client is configured purely through env vars (`OPENLINEAGE_URL`, `OPENLINEAGE_API_KEY` in `.env`),
+which point it at Datadog's intake (`https://data-obs-intake.<site>/api/v1/lineage`) and add the
+`Authorization: Bearer <key>` header automatically.
+
+There are two instrumentation layers, both in `demo_pipeline/`:
+
+1. **Per-asset (task) lineage** — `openlineage_integration.py`'s `with_lineage(...)` decorator
+   wraps each asset's compute function: it emits a `START` event before the function runs and a
+   `COMPLETE` or `FAIL` event after, declaring that asset's input/output tables as OpenLineage
+   Datasets (namespace `duckdb://demo-pipeline/warehouse`, name `schema.table`).
+
+   ```python
+   # demo_pipeline/assets.py
+   @asset(group_name="staging", compute_kind="duckdb", deps=[raw_orders])
+   @with_lineage("cleaned_orders", inputs=["raw.orders"], outputs=["staging.orders"])
+   def cleaned_orders(context, duckdb_resource):
+       ...
+   ```
+
+   That one line is enough for `cleaned_orders` to show up as a Job in Datadog with a `raw.orders
+   -> cleaned_orders -> staging.orders` edge in Lineage, and a `FAIL` run in Jobs Monitoring
+   whenever the simulated lock-timeout fires.
+
+2. **Job-level (DAG) lifecycle + data quality** — `sensors.py` defines three Dagster
+   [run status sensors](https://docs.dagster.io/concepts/partitions-schedules-sensors/sensors)
+   that emit the top-level `daily_refresh_job` DAG's `START`/`COMPLETE`/`FAIL` events. On success,
+   the sensor also reads the results of Dagster's native asset checks
+   (`no_orphan_customers`, `non_negative_revenue`) for that run and emits them as a
+   `dataQualityAssertions` facet on a dedicated `data_quality_validation` task node — so a failed
+   check shows up as a data quality issue on the relevant dataset in Lineage, not just a log line.
+
+Other facets used along the way: `jobType` (marks each event as a `TASK` or `DAG`, required by
+Datadog), `parent` (links every task run back to its parent DAG run), `errorMessage` (attached on
+`FAIL` events), and a custom `tags` facet carrying `env` (see `OL_ENV_TAG` in `.env`) since
+`openlineage-python`'s pinned version here doesn't ship a generated `TagsJobFacet` class.
 
 ## Notes
 
