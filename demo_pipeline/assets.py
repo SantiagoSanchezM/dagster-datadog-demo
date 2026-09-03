@@ -1,20 +1,16 @@
 import random
+from pathlib import Path
 
 import pandas as pd
 from dagster import AssetCheckResult, AssetExecutionContext, asset, asset_check
 from dagster_duckdb import DuckDBResource
-from faker import Faker
 
 from .openlineage_integration import with_lineage
 
-fake = Faker()
-Faker.seed(42)
-random.seed(42)
+SEED_DATA_DIR = Path(__file__).parent / "seed_data"
 
-REGIONS = ["NA", "EMEA", "APAC", "LATAM"]
-
-# separate RNG so this stays truly intermittent across runs, independent of the
-# fixed seed above (which only exists to keep the synthetic data reproducible)
+# RNG for the intermittent demo failure below - independent of the fabricated
+# seed data, which is static and committed to the repo (see seed_data/README.md)
 _flaky_rng = random.SystemRandom()
 
 
@@ -27,17 +23,9 @@ def _simulate_flaky_cleaning_step(failure_rate: float = 0.25) -> None:
 @asset(group_name="raw", compute_kind="python")
 @with_lineage("raw_customers", outputs=["raw.customers"])
 def raw_customers(context: AssetExecutionContext, duckdb_resource: DuckDBResource) -> None:
-    """Synthetic customer records, as if landed from a CRM export."""
-    rows = [
-        {
-            "customer_id": i,
-            "customer_name": fake.name(),
-            "region": random.choice(REGIONS),
-            "signup_date": fake.date_between(start_date="-2y", end_date="today"),
-        }
-        for i in range(1, 501)
-    ]
-    df = pd.DataFrame(rows)
+    """Customer records landed from a CRM export (fabricated, committed under seed_data/)."""
+    # keep_default_na=False: "NA" is a real region code here (North America), not a null marker
+    df = pd.read_csv(SEED_DATA_DIR / "customers.csv", keep_default_na=False)
     with duckdb_resource.get_connection() as conn:
         conn.execute("CREATE SCHEMA IF NOT EXISTS raw")
         conn.execute("CREATE OR REPLACE TABLE raw.customers AS SELECT * FROM df")
@@ -47,24 +35,12 @@ def raw_customers(context: AssetExecutionContext, duckdb_resource: DuckDBResourc
 @asset(group_name="raw", compute_kind="python")
 @with_lineage("raw_orders", outputs=["raw.orders"])
 def raw_orders(context: AssetExecutionContext, duckdb_resource: DuckDBResource) -> None:
-    """Synthetic order records, as if landed from an OLTP order service."""
-    rows = []
-    for i in range(1, 5001):
-        # sprinkle in some dirty data to make cleaning + data-quality checks meaningful
-        amount = round(random.uniform(5, 500), 2)
-        if random.random() < 0.02:
-            amount = -amount  # bad data: negative order amount
-        rows.append(
-            {
-                "order_id": i,
-                "customer_id": random.randint(1, 520),  # some orphan customer_ids on purpose
-                "order_amount": amount,
-                "order_date": fake.date_between(start_date="-1y", end_date="today"),
-            }
-        )
-    # duplicate a handful of rows to simulate upstream dupes
-    rows += random.sample(rows, 25)
-    df = pd.DataFrame(rows)
+    """Order records landed from an OLTP order service (fabricated, committed under seed_data/).
+
+    Deliberately messy - includes duplicate rows, negative amounts, and orphan
+    customer_ids - to make the cleaning step and data-quality checks meaningful.
+    """
+    df = pd.read_csv(SEED_DATA_DIR / "orders.csv")
     with duckdb_resource.get_connection() as conn:
         conn.execute("CREATE SCHEMA IF NOT EXISTS raw")
         conn.execute("CREATE OR REPLACE TABLE raw.orders AS SELECT * FROM df")
