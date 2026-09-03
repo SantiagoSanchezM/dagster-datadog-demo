@@ -10,8 +10,10 @@ services:
   dagster_postgresql:
     image: postgres:15
     container_name: dagster_postgresql
-    env_file:
-      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     networks:
       - dagster_network
     volumes:
@@ -29,10 +31,16 @@ services:
     container_name: demo_pipeline
     image: demo-pipeline:latest
     command: ["dagster", "api", "grpc", "-h", "0.0.0.0", "-p", "4000", "-m", "demo_pipeline"]
-    env_file:
-      - .env
     environment:
       DAGSTER_HOME: /opt/dagster/dagster_home
+      DD_API_KEY: ${DD_API_KEY}
+      DD_SITE: ${DD_SITE}
+      OPENLINEAGE_URL: ${OPENLINEAGE_URL}
+      OPENLINEAGE_API_KEY: ${OPENLINEAGE_API_KEY}
+      OL_ENV_TAG: ${OL_ENV_TAG}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - ./dagster_home:/opt/dagster/dagster_home
       - dagster_duckdb_data:/opt/dagster/app/data
@@ -46,10 +54,16 @@ services:
     container_name: dagster-webserver
     entrypoint: ["dagster-webserver"]
     command: ["-h", "0.0.0.0", "-p", "3000", "-w", "/opt/dagster/dagster_home/workspace.yaml"]
-    env_file:
-      - .env
     environment:
       DAGSTER_HOME: /opt/dagster/dagster_home
+      DD_API_KEY: ${DD_API_KEY}
+      DD_SITE: ${DD_SITE}
+      OPENLINEAGE_URL: ${OPENLINEAGE_URL}
+      OPENLINEAGE_API_KEY: ${OPENLINEAGE_API_KEY}
+      OL_ENV_TAG: ${OL_ENV_TAG}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "3000:3000"
     volumes:
@@ -69,10 +83,16 @@ services:
     container_name: dagster-daemon
     entrypoint: ["dagster-daemon"]
     command: ["run", "-w", "/opt/dagster/dagster_home/workspace.yaml"]
-    env_file:
-      - .env
     environment:
       DAGSTER_HOME: /opt/dagster/dagster_home
+      DD_API_KEY: ${DD_API_KEY}
+      DD_SITE: ${DD_SITE}
+      OPENLINEAGE_URL: ${OPENLINEAGE_URL}
+      OPENLINEAGE_API_KEY: ${OPENLINEAGE_API_KEY}
+      OL_ENV_TAG: ${OL_ENV_TAG}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - ./dagster_home:/opt/dagster/dagster_home
       - ./workspace.yaml:/opt/dagster/dagster_home/workspace.yaml

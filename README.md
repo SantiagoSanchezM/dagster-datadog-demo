@@ -22,25 +22,43 @@ with custom [OpenLineage](https://openlineage.io/) events sent directly to
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and fill in your own Datadog API key / site:
-   ```
-   cp .env.example .env
-   ```
-   `DD_SITE` / the intake host in `OPENLINEAGE_URL` should match your org's Datadog site
-   (`datadoghq.com`, `datadoghq.eu`, `us5.datadoghq.com`, etc).
+Pick one of the two options below to supply credentials, then build and start everything.
 
-2. Build and start everything:
-   ```
-   docker compose up -d --build
-   ```
+**Option A - plain `.env` file (quickest, avoid for anything beyond a throwaway local demo):**
 
-3. Open the Dagster UI at http://localhost:3000. The schedule starts running automatically
+```
+cp .env.example .env
+# edit .env with your own Datadog API key / site
+docker compose up -d --build
+```
+
+**Option B - 1Password CLI, no plaintext secret ever written to disk (recommended):**
+
+Store your Datadog API key as an item in your own 1Password vault, then edit
+[`.env.1password.tpl`](./.env.1password.tpl) to point `DD_API_KEY` / `OPENLINEAGE_API_KEY` at
+that item (`op://<vault>/<item>/<field>`). Start the stack through `op run` instead of `docker
+compose` directly:
+
+```
+op run --env-file=.env.1password.tpl -- docker compose up -d --build
+```
+
+`op run` resolves the `op://...` references at process start and injects the real values only
+into that one process's environment - the secret is never written to a file. See
+[1Password CLI: secrets as environment variables](https://developer.1password.com/docs/cli/secrets-environment-variables/).
+
+For either option, `DD_SITE` / the intake host in `OPENLINEAGE_URL` should match your org's
+Datadog site (`datadoghq.com`, `datadoghq.eu`, `us5.datadoghq.com`, etc).
+
+Then:
+
+1. Open the Dagster UI at http://localhost:3000. The schedule starts running automatically
    every 5 minutes, or trigger a run manually:
    ```
    docker compose exec dagster-webserver dagster job launch -j daily_refresh_job
    ```
 
-4. Check Datadog under **Data Observability > Jobs Monitoring / Lineage** for `daily_refresh_job`
+2. Check Datadog under **Data Observability > Jobs Monitoring / Lineage** for `daily_refresh_job`
    and its asset-level tasks, including the `data_quality_validation` node and any failed runs.
 
 ## How the OpenLineage instrumentation works
@@ -109,6 +127,8 @@ Datadog), `parent` (links every task run back to its parent DAG run), `errorMess
 
 ## Notes
 
-- `.env` is gitignored — never commit real credentials.
+- `.env` is gitignored — never commit real credentials. `.env.example` and `.env.1password.tpl`
+  contain no real secrets (placeholder values / generic `op://<vault>/<item>/<field>`
+  references) and are safe to commit.
 - `dagster_home/` runtime artifacts (run storage cache, logs, telemetry) are gitignored;
   only `dagster_home/dagster.yaml` (Postgres storage config) is tracked.
