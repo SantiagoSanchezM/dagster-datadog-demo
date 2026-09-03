@@ -16,6 +16,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     networks:
       - dagster_network
+    restart: unless-stopped
     volumes:
       - dagster_pg_data:/var/lib/postgresql/data
     healthcheck:
@@ -46,6 +47,7 @@ services:
       - dagster_duckdb_data:/opt/dagster/app/data
     networks:
       - dagster_network
+    restart: unless-stopped
     expose:
       - "4000"
 
@@ -72,6 +74,7 @@ services:
       - dagster_duckdb_data:/opt/dagster/app/data
     networks:
       - dagster_network
+    restart: unless-stopped
     depends_on:
       dagster_postgresql:
         condition: service_healthy
@@ -99,6 +102,7 @@ services:
       - dagster_duckdb_data:/opt/dagster/app/data
     networks:
       - dagster_network
+    restart: unless-stopped
     depends_on:
       dagster_postgresql:
         condition: service_healthy

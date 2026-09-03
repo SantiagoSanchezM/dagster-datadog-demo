@@ -61,6 +61,13 @@ Then:
 2. Check Datadog under **Data Observability > Jobs Monitoring / Lineage** for `daily_refresh_job`
    and its asset-level tasks, including the `data_quality_validation` node and any failed runs.
 
+All services run with `restart: unless-stopped`, so once containers exist, just starting Docker
+(e.g. opening OrbStack) brings them back up on its own - no need to re-run `docker compose up` or
+`op run` every time. That said, secrets are resolved into a container's config once, at creation
+time; restarting an existing container doesn't re-invoke `op run`. If you `docker compose down`
+(removes containers) or change the image, you'll need to bring the stack up through `op run`
+(Option B) or with a populated `.env` (Option A) one more time.
+
 ## How the OpenLineage instrumentation works
 
 Datadog's Data Job Monitoring and Lineage products are both built on
