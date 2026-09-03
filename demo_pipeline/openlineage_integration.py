@@ -161,7 +161,12 @@ def emit_task_event(
 
 
 def _output_row_counts(duckdb_resource, tables: list[str] | None) -> dict[str, int]:
-    """Best-effort row counts for the tables an asset just wrote, for the outputStatistics facet."""
+    """Best-effort row counts for the tables an asset just wrote, for the outputStatistics facet.
+
+    This doesn't surface in Datadog's Quality Monitoring UI (that product scans natively
+    connected warehouses, see README "Future enhancements") - it's kept here as a working
+    example of attaching a custom per-dataset attribute/metric via an OpenLineage facet.
+    """
     if duckdb_resource is None or not tables:
         return {}
     counts = {}

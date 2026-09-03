@@ -72,20 +72,16 @@ There are two instrumentation layers, both in `demo_pipeline/`:
        ...
    ```
 
-   On `COMPLETE`, the decorator also runs a `SELECT COUNT(*)` against each declared output table
-   and attaches it as an `outputStatistics` facet (`rowCount`) on that Dataset - this is what makes
-   real record counts show up on dataset nodes in the Lineage graph, since Datadog only displays
-   "basic stats such as row or column count" when a facet actually supplies them. Dataset identity
-   (the node existing at all) doesn't require a live DB connection, but any stats shown on it do -
-   we compute those ourselves here since DuckDB isn't one of Datadog's natively-scanned warehouses
-   (Snowflake, BigQuery, Redshift, Postgres, etc.). A deeper "Quality Monitoring" experience
-   (freshness/volume anomaly detection) is a separate Datadog product built around those native
-   connectors; getting that would mean pointing Datadog at a real supported warehouse rather than
-   this demo's local DuckDB file.
-
    That one line is enough for `cleaned_orders` to show up as a Job in Datadog with a `raw.orders
    -> cleaned_orders -> staging.orders` edge in Lineage, and a `FAIL` run in Jobs Monitoring
    whenever the simulated lock-timeout fires.
+
+   On `COMPLETE`, the decorator also runs a `SELECT COUNT(*)` against each declared output table
+   and attaches it as an `outputStatistics` facet (`rowCount`) on that Dataset. In practice this
+   did **not** surface anywhere in Datadog's Quality Monitoring UI - that product is built around
+   scanning natively-connected warehouses (see "Future enhancements" below), not arbitrary
+   OpenLineage facets. The code is left in place as a working example of how to attach a custom
+   per-dataset attribute/metric to an event, not as a real data-quality signal.
 
 2. **Job-level (DAG) lifecycle + data quality** — `sensors.py` defines three Dagster
    [run status sensors](https://docs.dagster.io/concepts/partitions-schedules-sensors/sensors)
@@ -99,6 +95,17 @@ Other facets used along the way: `jobType` (marks each event as a `TASK` or `DAG
 Datadog), `parent` (links every task run back to its parent DAG run), `errorMessage` (attached on
 `FAIL` events), and a custom `tags` facet carrying `env` (see `OL_ENV_TAG` in `.env`) since
 `openlineage-python`'s pinned version here doesn't ship a generated `TagsJobFacet` class.
+
+## Future enhancements
+
+- **Native Quality Monitoring on Postgres.** The stack already runs a Postgres container
+  (currently used only for Dagster's own run/event/schedule storage). The warehouse tables
+  (`raw`, `staging`, `analytics`) could be moved from the local DuckDB file into that same
+  Postgres instance, then connected to Datadog's native [Quality Monitoring](https://docs.datadoghq.com/data_observability/quality_monitoring/)
+  Postgres integration. That gives real freshness/volume/nullness anomaly detection scanned
+  directly off the tables, while Dagster's job runs and lineage keep flowing through the
+  OpenLineage instrumentation described above unchanged - the two products would complement
+  each other instead of one trying to stand in for the other.
 
 ## Notes
 
