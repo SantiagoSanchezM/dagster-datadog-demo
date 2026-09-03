@@ -1,0 +1,88 @@
+networks:
+  dagster_network:
+    name: dagster_network
+
+volumes:
+  dagster_pg_data:
+  dagster_duckdb_data:
+
+services:
+  dagster_postgresql:
+    image: postgres:15
+    container_name: dagster_postgresql
+    environment:
+      POSTGRES_USER: dagster
+      POSTGRES_PASSWORD: dagster
+      POSTGRES_DB: dagster
+    networks:
+      - dagster_network
+    volumes:
+      - dagster_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dagster"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  demo_pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: demo_pipeline
+    image: demo-pipeline:latest
+    command: ["dagster", "api", "grpc", "-h", "0.0.0.0", "-p", "4000", "-m", "demo_pipeline"]
+    env_file:
+      - .env
+    environment:
+      DAGSTER_HOME: /opt/dagster/dagster_home
+    volumes:
+      - ./dagster_home:/opt/dagster/dagster_home
+      - dagster_duckdb_data:/opt/dagster/app/data
+    networks:
+      - dagster_network
+    expose:
+      - "4000"
+
+  dagster-webserver:
+    image: demo-pipeline:latest
+    container_name: dagster-webserver
+    entrypoint: ["dagster-webserver"]
+    command: ["-h", "0.0.0.0", "-p", "3000", "-w", "/opt/dagster/dagster_home/workspace.yaml"]
+    env_file:
+      - .env
+    environment:
+      DAGSTER_HOME: /opt/dagster/dagster_home
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./dagster_home:/opt/dagster/dagster_home
+      - ./workspace.yaml:/opt/dagster/dagster_home/workspace.yaml
+      - dagster_duckdb_data:/opt/dagster/app/data
+    networks:
+      - dagster_network
+    depends_on:
+      dagster_postgresql:
+        condition: service_healthy
+      demo_pipeline:
+        condition: service_started
+
+  dagster-daemon:
+    image: demo-pipeline:latest
+    container_name: dagster-daemon
+    entrypoint: ["dagster-daemon"]
+    command: ["run", "-w", "/opt/dagster/dagster_home/workspace.yaml"]
+    env_file:
+      - .env
+    environment:
+      DAGSTER_HOME: /opt/dagster/dagster_home
+    volumes:
+      - ./dagster_home:/opt/dagster/dagster_home
+      - ./workspace.yaml:/opt/dagster/dagster_home/workspace.yaml
+      - dagster_duckdb_data:/opt/dagster/app/data
+    networks:
+      - dagster_network
+    depends_on:
+      dagster_postgresql:
+        condition: service_healthy
+      demo_pipeline:
+        condition: service_started

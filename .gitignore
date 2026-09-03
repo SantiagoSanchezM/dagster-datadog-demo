@@ -1,0 +1,10 @@
+.env
+data/
+dagster_home/storage/
+dagster_home/logs/
+dagster_home/.logs_queue
+dagster_home/.telemetry/
+dagster_home/workspace.yaml
+demo_pipeline/data/
+__pycache__/
+*.pyc
